@@ -1,0 +1,12 @@
+setup.py
+ai_notes_generator.egg-info/PKG-INFO
+ai_notes_generator.egg-info/SOURCES.txt
+ai_notes_generator.egg-info/dependency_links.txt
+ai_notes_generator.egg-info/requires.txt
+ai_notes_generator.egg-info/top_level.txt
+app/__init__.py
+app/main.py
+app/api/__init__.py
+app/api/endpoints/__init__.py
+app/api/endpoints/flashcards.py
+tests/test_network_errors.py
