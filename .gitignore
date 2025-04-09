@@ -1,7 +1,7 @@
 # Environment variables
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # Python
 __pycache__/
@@ -27,7 +27,7 @@ wheels/
 
 # Virtual Environment
 venv/
-env/
+.venv/
 ENV/
 
 # IDE
@@ -35,10 +35,17 @@ ENV/
 .vscode/
 *.swp
 *.swo
+.DS_Store
 
 # Logs
 *.log
 logs/
+log/
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
 
 # Node
 node_modules/
@@ -47,5 +54,10 @@ yarn-debug.log*
 yarn-error.log*
 
 # Build
-dist/
-build/ 
+/build
+/dist
+/.next/
+/out/
+
+# Local development
+*.local 

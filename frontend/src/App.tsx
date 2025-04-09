@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   ChakraProvider,
   Box,
@@ -13,32 +13,101 @@ import {
   CardHeader,
   CardFooter,
   Icon,
+  useToast,
 } from '@chakra-ui/react'
-import { createStandaloneToast } from '@chakra-ui/toast'
 import { FiUpload, FiRefreshCw } from 'react-icons/fi'
 import axios from 'axios'
-
-const { toast, ToastContainer } = createStandaloneToast()
+import './App.css'
 
 interface Flashcard {
   question: string
   answer: string
 }
 
+interface FlashcardResponse {
+  flashcards: Flashcard[]
+}
+
+// Create axios instance with base URL and timeout
+const api = axios.create({
+  baseURL: 'http://localhost:8000/api/v1',
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+
 function App() {
+  const [file, setFile] = useState<File | null>(null)
   const [flashcards, setFlashcards] = useState<Flashcard[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [currentCardIndex, setCurrentCardIndex] = useState(0)
   const [showAnswer, setShowAnswer] = useState(false)
+  const [isBackendConnected, setIsBackendConnected] = useState(false)
+  const toast = useToast()
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+  // Check backend connection on component mount
+  useEffect(() => {
+    const checkBackendConnection = async () => {
+      try {
+        const response = await api.get('/flashcards/health')
+        if (response.status === 200) {
+          setIsBackendConnected(true)
+        }
+      } catch (error) {
+        setIsBackendConnected(false)
+        console.error('Backend connection error:', error)
+      }
+    }
 
-    if (file.type !== 'application/pdf') {
+    checkBackendConnection()
+  }, [])
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0]
+    if (selectedFile) {
+      // Validate file type
+      if (selectedFile.type !== 'application/pdf') {
+        toast({
+          title: 'Invalid file type',
+          description: 'Please upload a PDF file',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        })
+        return
+      }
+      
+      // Validate file size (10MB limit)
+      if (selectedFile.size > 10 * 1024 * 1024) {
+        toast({
+          title: 'File too large',
+          description: 'Maximum file size is 10MB',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        })
+        return
+      }
+
+      setFile(selectedFile)
+      setError(null)
       toast({
-        title: 'Invalid file type',
-        description: 'Please upload a PDF file',
+        title: 'File selected',
+        description: `${selectedFile.name} is ready to upload`,
+        status: 'success',
+        duration: 2000,
+        isClosable: true,
+      })
+    }
+  }
+
+  const handleFileUpload = async () => {
+    if (!file) {
+      toast({
+        title: 'No file selected',
+        description: 'Please select a PDF file first',
         status: 'error',
         duration: 3000,
         isClosable: true,
@@ -46,38 +115,79 @@ function App() {
       return
     }
 
-    setIsLoading(true)
+    if (!isBackendConnected) {
+      toast({
+        title: 'Backend not connected',
+        description: 'Please ensure the backend server is running',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      })
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+    setFlashcards([])
+
     const formData = new FormData()
-    formData.append('pdf_file', file)
+    formData.append('file', file)
 
     try {
-      const response = await axios.post('http://localhost:8080/api/generate-flashcards', formData, {
+      console.log('Uploading file:', file.name, 'Size:', file.size)
+      
+      const response = await api.post<FlashcardResponse>('/flashcards/generate', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+        timeout: 120000, // 2 minutes timeout
+        maxContentLength: 10 * 1024 * 1024, // 10MB max file size
       })
-      setFlashcards(response.data)
-      setCurrentCardIndex(0)
-      setShowAnswer(false)
-      toast({
-        title: 'Success',
-        description: 'Flashcards generated successfully',
-        status: 'success',
-        duration: 3000,
-        isClosable: true,
-      })
-    } catch (error: any) {
-      console.error('Error details:', error)
-      const errorMessage = error.response?.data?.detail || error.message || 'Failed to generate flashcards'
+
+      console.log('Response received:', response.status, response.data)
+
+      if (response.status === 200 && response.data.flashcards) {
+        setFlashcards(response.data.flashcards)
+        setCurrentCardIndex(0)
+        setShowAnswer(false)
+        toast({
+          title: 'Success',
+          description: `Generated ${response.data.flashcards.length} flashcards`,
+          status: 'success',
+          duration: 3000,
+          isClosable: true,
+        })
+      } else {
+        throw new Error('Invalid response format')
+      }
+    } catch (error) {
+      console.error('Upload error:', error)
+      
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ECONNABORTED') {
+          setError('Request timed out. Please try again later.')
+        } else if (error.code === 'ERR_NETWORK') {
+          setError('Network error. Please check your internet connection and ensure the backend server is running.')
+        } else if (error.response) {
+          setError(`Server error: ${error.response.data?.detail || error.message}`)
+        } else if (error.request) {
+          setError('No response from server. Please ensure the backend server is running.')
+        } else {
+          setError(`Error: ${error.message}`)
+        }
+      } else {
+        setError('An unexpected error occurred. Please try again later.')
+      }
+      
       toast({
         title: 'Error',
-        description: errorMessage,
+        description: error instanceof Error ? error.message : 'Failed to generate flashcards',
         status: 'error',
         duration: 5000,
         isClosable: true,
       })
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
   }
 
@@ -97,7 +207,6 @@ function App() {
 
   return (
     <ChakraProvider>
-      <ToastContainer />
       <Box minH="100vh" bg="gray.50" py={10}>
         <Container maxW="container.md">
           <VStack spacing={8}>
@@ -105,6 +214,14 @@ function App() {
             <Text textAlign="center" color="gray.600">
               Upload a PDF document to generate AI-powered flashcards
             </Text>
+
+            {!isBackendConnected && (
+              <Box p={4} bg="red.50" borderRadius="md" border="1px" borderColor="red.200">
+                <Text color="red.500">
+                  Backend server is not connected. Please ensure the backend server is running at http://localhost:8000
+                </Text>
+              </Box>
+            )}
 
             <Box
               p={6}
@@ -119,7 +236,7 @@ function App() {
                 <input
                   type="file"
                   accept=".pdf"
-                  onChange={handleFileUpload}
+                  onChange={handleFileChange}
                   style={{ display: 'none' }}
                   id="file-upload"
                 />
@@ -128,14 +245,32 @@ function App() {
                     as="span"
                     leftIcon={<Icon as={FiUpload} />}
                     colorScheme="blue"
-                    isLoading={isLoading}
+                    isLoading={loading}
                     loadingText="Generating Flashcards..."
+                    isDisabled={!isBackendConnected}
                   >
-                    Upload PDF
+                    {file ? `Upload ${file.name}` : 'Upload PDF'}
                   </Button>
                 </label>
+                {file && (
+                  <Button
+                    onClick={handleFileUpload}
+                    colorScheme="green"
+                    isLoading={loading}
+                    loadingText="Generating..."
+                    isDisabled={!isBackendConnected}
+                  >
+                    Generate Flashcards
+                  </Button>
+                )}
               </VStack>
             </Box>
+
+            {error && (
+              <Text color="red.500" mt={4}>
+                {error}
+              </Text>
+            )}
 
             {flashcards.length > 0 && (
               <Card w="100%" bg="white" borderColor="gray.200">
