@@ -30,7 +30,7 @@ interface FlashcardResponse {
 
 // Create axios instance with base URL and timeout
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api/v1',
+  baseURL: 'http://127.0.0.1:8000/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -51,7 +51,7 @@ function App() {
   useEffect(() => {
     const checkBackendConnection = async () => {
       try {
-        const response = await api.get('/flashcards/health')
+        const response = await api.get('/health')
         if (response.status === 200) {
           setIsBackendConnected(true)
         }
@@ -131,12 +131,12 @@ function App() {
     setFlashcards([])
 
     const formData = new FormData()
-    formData.append('file', file)
+    formData.append('pdf_file', file)
 
     try {
       console.log('Uploading file:', file.name, 'Size:', file.size)
       
-      const response = await api.post<FlashcardResponse>('/flashcards/generate', formData, {
+      const response = await api.post<Flashcard[]>('/generate-flashcards', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -146,13 +146,13 @@ function App() {
 
       console.log('Response received:', response.status, response.data)
 
-      if (response.status === 200 && response.data.flashcards) {
-        setFlashcards(response.data.flashcards)
+      if (response.status === 200 && response.data) {
+        setFlashcards(response.data)
         setCurrentCardIndex(0)
         setShowAnswer(false)
         toast({
           title: 'Success',
-          description: `Generated ${response.data.flashcards.length} flashcards`,
+          description: `Generated ${response.data.length} flashcards`,
           status: 'success',
           duration: 3000,
           isClosable: true,
@@ -218,7 +218,7 @@ function App() {
             {!isBackendConnected && (
               <Box p={4} bg="red.50" borderRadius="md" border="1px" borderColor="red.200">
                 <Text color="red.500">
-                  Backend server is not connected. Please ensure the backend server is running at http://localhost:8000
+                  Backend server is not connected. Please ensure the backend server is running at http://127.0.0.1:8000
                 </Text>
               </Box>
             )}
